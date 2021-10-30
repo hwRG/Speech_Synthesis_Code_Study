@@ -8,6 +8,7 @@ from torch.nn.utils.rnn import pad_sequence
 from util.hparams import *
 
 
+# mel, spec 불러오기
 data_dir = './data'
 mel_list = sorted(glob.glob(os.path.join(data_dir + '/mel', '*.npy')))
 spec_list = sorted(glob.glob(os.path.join(data_dir + '/spec', '*.npy')))
@@ -15,6 +16,7 @@ mel_len = np.load(os.path.join(data_dir + '/mel_len.npy'))
 
 def DataGenerator():
     while True:
+        # train1과 마찬가지로 batch_group(batch^2)만큼 설정
         idx_list = np.random.choice(len(mel_list), batch_group, replace=False)
         idx_list = sorted(idx_list)
         idx_list = [idx_list[i : i + batch_size] for i in range(0, len(idx_list), batch_size)]
@@ -54,6 +56,7 @@ class Generator(threading.Thread):
 def train(args):
     train_loader = Generator(DataGenerator())
 
+    # Encoder - Attention - Decoder 이후 진행하는 Post-net
     model = post_CBHG(K=8, conv_dim=[256, mel_dim]).cuda()
 
     optimizer = optim.Adam(model.parameters())
@@ -66,18 +69,21 @@ def train(args):
         step = ckpt['step'],
         step = step[0]
         epoch = ckpt['epoch']
+        sec = 0
         print('Load Status: Epoch %d, Step %d' % (epoch, step))
 
+    # 하드웨어에 맞게 최상의 알고리즘(텐서 크기, conv 연산 등) 선택
     torch.backends.cudnn.benchmark = True
-
     try:
         for epoch in itertools.count(epochs):
+            print(step, "batch_group fin")
             for _ in range(batch_group):
                 start = time.time()
                 mel, target = train_loader.next()
                 mel = mel.float().cuda()
                 target = target.float().cuda()
 
+                # CBHG 수행
                 pred = model(mel)
                 loss = L1Loss()(pred, target)
 
@@ -86,7 +92,10 @@ def train(args):
                 optimizer.step()
 
                 step += 1
-                print('step: {}, loss: {:.5f}, {:.3f} sec/step'.format(step, loss, time.time() - start))
+                sec += time.time() - start
+                if step % step_view == 0:
+                    print('step: {}, loss: {:.5f}, {:.3f} sec/step'.format(step, loss, sec))
+                    sec = 0
 
                 if step % checkpoint_step == 0:
                     save_dir = './ckpt/' + args.name + '/2'
