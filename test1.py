@@ -8,20 +8,21 @@ from util.hparams import *
 
 
 sentences = [
-  '정말로 사랑한담 기다려주세요'
+  '안녕하세요'
 ]
 
-checkpoint_dir = './checkpoint/1'
 save_dir = './output'
 os.makedirs(save_dir, exist_ok=True)
 
 
 def inference(text, idx):
     seq = text_to_sequence(text)
+    print(seq)
     enc_input = torch.tensor(seq, dtype=torch.int64).unsqueeze(0)
     sequence_length = torch.tensor([len(seq)], dtype=torch.int32)
     dec_input = torch.from_numpy(np.zeros((1, mel_dim), dtype=np.float32))
     
+    # mode=inference, training false
     pred, alignment = model(enc_input, sequence_length, dec_input, is_training=False, mode='inference')
     pred = pred.squeeze().detach().numpy()
     alignment = np.squeeze(alignment.detach().numpy(), axis=0)
@@ -40,6 +41,7 @@ if __name__ == "__main__":
     
     model = Tacotron(K=16, conv_dim=[128, 128])
     ckpt = torch.load(args.checkpoint)
+    # Tacotron 모델 불러오기
     model.load_state_dict(ckpt['model'])
     
     for i, text in enumerate(sentences):

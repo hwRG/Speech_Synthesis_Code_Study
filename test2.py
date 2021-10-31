@@ -12,6 +12,7 @@ os.makedirs(save_dir, exist_ok=True)
 mel_list = glob.glob(os.path.join(save_dir, '*.npy'))
 
 
+# mel-spectrogram을 griffin lim으로 wav 변환
 def inference(text, idx):
     mel = torch.from_numpy(text).unsqueeze(0)
     pred = model(mel)
@@ -20,7 +21,11 @@ def inference(text, idx):
     
     pred = (np.clip(pred, 0, 1) * max_db) - max_db + ref_db
     pred = np.power(10.0, pred * 0.05)
+    
+    # griffin lim
     wav = griffin_lim(pred ** 1.5)
+
+    # istft 진행된 결과물에 필터링
     wav = scipy.signal.lfilter([1], [1, -preemphasis], wav)
     wav = librosa.effects.trim(wav, frame_length=win_length, hop_length=hop_length)[0]
     wav = wav.astype(np.float32)
