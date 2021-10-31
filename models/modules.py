@@ -15,6 +15,7 @@ class prenet(Module):
         x = self.fc1(input_data)
         x = ReLU()(x)
         
+        # Training이 목적인 경우 dropout 진행
         if is_training:
             x = Dropout()(x)
         
@@ -31,13 +32,17 @@ class CBHG(Module):
     def __init__(self, K, conv_dim):
         super(CBHG, self).__init__()
         self.K = K
+        # Conv1D bank와 stacking 진행(for문), encoder dim은 128
         self.conv_bank = ModuleList(
             [Conv1d(conv_dim[1], encoder_dim, kernel_size=k, padding=k//2) for k in range(1, self.K+1)])
+        # bn은 학습 과정 자체를 안정화하여 학습 속도를 가속화 함
         self.bn = BatchNorm1d(encoder_dim)
+        # norm 활용 이유 : local optimum에 빠지지 않기 위해 (그래프를 더 크게 보아 local 함정에 빠지지 않게 하기)
         
         self.conv1 = Conv1d(encoder_dim * K, conv_dim[0], kernel_size=3, padding=1)
         self.bn1 = BatchNorm1d(conv_dim[0])
         self.conv2 = Conv1d(conv_dim[0], conv_dim[1], kernel_size=3, padding=1)
+        # conv_dim[1]은 conv_dim[0]과 동일하게 128
         self.bn2 = BatchNorm1d(conv_dim[1])
         
         self.fc = Linear(conv_dim[1], encoder_dim)
@@ -77,14 +82,19 @@ class CBHG(Module):
 
         return x
     
-    
+# seq2seq의 attention 종류
+# https://hcnoh.github.io/2019-01-01-luong-attention
 class LuongAttention(Module):
     def __init__(self):
         super(LuongAttention, self).__init__()
         self.w = Linear(decoder_dim, decoder_dim)
+        # context vector를 현시점(st)에서 계산하여 연산 경로의 간소화
         
+    # query는 attention rnn state, value는 encoder의 output
     def forward(self, query, value):
         alignment = Softmax(dim=-1)(torch.matmul(query, self.w(value).transpose(1, 2)))
+        
+        # 현 시점에서 context를 구하는 모습
         context = torch.matmul(alignment, value)
         context = torch.cat([context, query], axis=-1)
         alignment = alignment.transpose(1, 2)
