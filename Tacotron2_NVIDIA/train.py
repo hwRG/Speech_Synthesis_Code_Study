@@ -146,6 +146,7 @@ def validate(model, criterion, valset, iteration, batch_size, n_gpus,
         logger.log_validation(val_loss, model, y, y_pred, iteration)
 
 
+# Training
 def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
           rank, group_name, hparams):
     """Training and validation logging results to tensorboard and stdout
@@ -165,30 +166,35 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
     torch.manual_seed(hparams.seed)
     torch.cuda.manual_seed(hparams.seed)
 
+    # 모델 불러오기 Tacotron2
     model = load_model(hparams)
     learning_rate = hparams.learning_rate
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,
                                  weight_decay=hparams.weight_decay)
 
+    # default는 false
     if hparams.fp16_run:
         from apex import amp
         model, optimizer = amp.initialize(
             model, optimizer, opt_level='O2')
 
+    # default는 false
     if hparams.distributed_run:
         model = apply_gradient_allreduce(model)
 
+    # Loss 세팅 MSE + BCE,sigmoid
     criterion = Tacotron2Loss()
 
     logger = prepare_directories_and_logger(
         output_directory, log_directory, rank)
 
+    # 학습을 위한 데이터
     train_loader, valset, collate_fn = prepare_dataloaders(hparams)
 
     # Load checkpoint if one exists
     iteration = 0
     epoch_offset = 0
-    if checkpoint_path is not None:
+    if checkpoint_path is not None: # ckpt 있으면 
         if warm_start:
             model = warm_start_model(
                 checkpoint_path, model, hparams.ignore_layers)
@@ -223,6 +229,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
             else:
+                # loss backprop
                 loss.backward()
 
             if hparams.fp16_run:
@@ -230,6 +237,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
                     amp.master_params(optimizer), hparams.grad_clip_thresh)
                 is_overflow = math.isnan(grad_norm)
             else:
+                # clip grad norm 
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     model.parameters(), hparams.grad_clip_thresh)
 

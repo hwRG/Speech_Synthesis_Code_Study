@@ -459,8 +459,8 @@ class Tacotron2(nn.Module):
         super(Tacotron2, self).__init__()
         self.mask_padding = hparams.mask_padding
         self.fp16_run = hparams.fp16_run
-        self.n_mel_channels = hparams.n_mel_channels
-        self.n_frames_per_step = hparams.n_frames_per_step
+        self.n_mel_channels = hparams.n_mel_channels # 80
+        self.n_frames_per_step = hparams.n_frames_per_step # 1
         self.embedding = nn.Embedding(
             hparams.n_symbols, hparams.symbols_embedding_dim)
         std = sqrt(2.0 / (hparams.n_symbols + hparams.symbols_embedding_dim))
@@ -496,19 +496,26 @@ class Tacotron2(nn.Module):
 
         return outputs
 
+    # input은 x
     def forward(self, inputs):
         text_inputs, text_lengths, mels, max_len, output_lengths = inputs
         text_lengths, output_lengths = text_lengths.data, output_lengths.data
 
+        # embedding은 항상 transpose 1,2
         embedded_inputs = self.embedding(text_inputs).transpose(1, 2)
 
+        # encoder 학습 (embedded된 text가 input)
         encoder_outputs = self.encoder(embedded_inputs, text_lengths)
 
+        # decoder 학습 (encoding된 text가 input)
         mel_outputs, gate_outputs, alignments = self.decoder(
             encoder_outputs, mels, memory_lengths=text_lengths)
 
+        # 5 Conv Postnet 학습
         mel_outputs_postnet = self.postnet(mel_outputs)
+        # Decoder의 output과 합체
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
+
 
         return self.parse_output(
             [mel_outputs, mel_outputs_postnet, gate_outputs, alignments],
